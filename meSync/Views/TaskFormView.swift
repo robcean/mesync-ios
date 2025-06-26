@@ -69,8 +69,16 @@ struct TaskFormView: View {
             actionButtons
         }
         .onAppear {
-            // Always sync priority on appear
-            selectedPriority = taskData.priority
+            // If creating new task (not editing), reset form
+            if case .taskForm(let editingTask) = quickAddState,
+               editingTask == nil {
+                // Reset to fresh state for new task
+                taskData = TaskData()
+                selectedPriority = .medium
+            } else {
+                // Always sync priority on appear for editing
+                selectedPriority = taskData.priority
+            }
             
             // Focus on name field when form appears
             isNameFocused = true

@@ -13,13 +13,11 @@ struct ProgressView: View {
     @Query(sort: \HabitData.remindAt) private var habits: [HabitData]
     @Query(sort: \MedicationData.name) private var medications: [MedicationData]
     
-    // Use shared state manager
-    @StateObject private var stateManager = InstanceStateManager.shared
-    
     // UI State
     @State private var selectedDate = Date()
     @State private var selectedFilter: FilterType = .all
     @State private var currentPage = 0
+    @State private var searchText = ""
     private let itemsPerPage = 40
     
     enum FilterType: String, CaseIterable {
@@ -38,13 +36,11 @@ struct ProgressView: View {
         }
     }
     
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Filter chips
-            filterSection
-            
-            // Date selector
-            dateSelector
+            // Top controls
+            topControlsSection
             
             // Items list
             ScrollView {
@@ -74,6 +70,9 @@ struct ProgressView: View {
         }
         .onChange(of: selectedFilter) { _, _ in
             currentPage = 0  // Reset to first page when filter changes
+        }
+        .onChange(of: searchText) { _, _ in
+            currentPage = 0  // Reset to first page when search changes
         }
     }
     
@@ -123,19 +122,67 @@ struct ProgressView: View {
         .padding(.vertical, AppSpacing.lg)
     }
     
-    // MARK: - Filter Section
-    private var filterSection: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AppSpacing.sm) {
-                ForEach(FilterType.allCases, id: \.self) { filter in
-                    filterChip(for: filter)
-                }
+    // MARK: - Top Controls Section
+    private var topControlsSection: some View {
+        VStack(spacing: AppSpacing.md) {
+            // Date picker row
+            HStack {
+                Text("Showing history for:")
+                    .font(AppTypography.caption)
+                    .foregroundStyle(AppColors.secondaryText)
+                
+                DatePicker(
+                    "",
+                    selection: $selectedDate,
+                    displayedComponents: .date
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                
+                Spacer()
             }
             .padding(.horizontal, AppSpacing.lg)
+            .padding(.top, AppSpacing.md)
+            
+            // Filter chips
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.sm) {
+                    ForEach(FilterType.allCases, id: \.self) { filter in
+                        filterChip(for: filter)
+                    }
+                }
+                .padding(.horizontal, AppSpacing.lg)
+            }
+            
+            // Search bar
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(AppColors.secondaryText)
+                    .font(.system(size: 16))
+                
+                TextField("Search items...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(AppTypography.body)
+                
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(AppColors.secondaryText)
+                            .font(.system(size: 16))
+                    }
+                }
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(AppColors.cardBackground, in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius))
+            .padding(.horizontal, AppSpacing.lg)
         }
-        .padding(.vertical, AppSpacing.md)
+        .padding(.bottom, AppSpacing.md)
         .background(AppColors.background)
     }
+    
     
     private func filterChip(for filter: FilterType) -> some View {
         Button {
@@ -172,56 +219,6 @@ struct ProgressView: View {
         .pressableStyle()
     }
     
-    // MARK: - Date Selector
-    private var dateSelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AppSpacing.sm) {
-                ForEach(dateRange, id: \.self) { date in
-                    dateChip(for: date)
-                }
-            }
-            .padding(.horizontal, AppSpacing.sm)
-        }
-        .padding(.bottom, AppSpacing.md)
-        .background(AppColors.background)
-    }
-    
-    private func dateChip(for date: Date) -> some View {
-        let calendar = Calendar.current
-        let isSelected = calendar.isDate(date, inSameDayAs: selectedDate)
-        let isToday = calendar.isDateInToday(date)
-        
-        return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                selectedDate = date
-            }
-        } label: {
-            VStack(spacing: 2) {
-                Text(dayOfWeek(from: date))
-                    .font(.caption2)
-                    .fontWeight(.medium)
-                    .foregroundStyle(isSelected ? .white : AppColors.secondaryText)
-                
-                Text("\(calendar.component(.day, from: date))")
-                    .font(AppTypography.body)
-                    .fontWeight(isToday ? .bold : .medium)
-                    .foregroundStyle(isSelected ? .white : AppColors.primaryText)
-            }
-            .frame(width: 45, height: 60)
-            .background(
-                isSelected ? AppColors.primary : AppColors.cardBackground,
-                in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
-                    .stroke(
-                        isSelected ? AppColors.primary : (isToday ? AppColors.primary.opacity(0.5) : AppColors.secondaryText.opacity(0.3)),
-                        lineWidth: isToday ? 2 : 1
-                    )
-            )
-        }
-        .pressableStyle()
-    }
     
     // MARK: - Filtered Items
     private var filteredItems: [any ItemProtocol] {
@@ -251,32 +248,30 @@ struct ProgressView: View {
         
         // Filter habit instances
         if selectedFilter == .all || selectedFilter == .habits {
-            let filteredHabits = habitInstances.filter { instance in
-                // Only include completed or skipped instances
-                guard instance.isCompleted || instance.isSkipped else { return false }
-                
-                // Check if action happened on selected date using the timestamp
-                let actionDate = instance.actionTimestamp ?? instance.instanceDate
-                return calendar.isDate(actionDate, inSameDayAs: selectedDate)
-            }
-            allCompletedItems.append(contentsOf: filteredHabits)
+            // All instances are already filtered and only completed/skipped ones are included
+            allCompletedItems.append(contentsOf: habitInstances)
         }
         
         // Filter medication instances
         if selectedFilter == .all || selectedFilter == .medications {
-            let filteredMedications = medicationInstances.filter { instance in
-                // Only include completed or skipped instances
-                guard instance.isCompleted || instance.isSkipped else { return false }
-                
-                // Check if action happened on selected date using the timestamp
-                let actionDate = instance.actionTimestamp ?? instance.instanceDate
-                return calendar.isDate(actionDate, inSameDayAs: selectedDate)
+            // All instances are already filtered and only completed/skipped ones are included
+            allCompletedItems.append(contentsOf: medicationInstances)
+        }
+        
+        // Apply search filter if needed
+        let searchFilteredItems: [any ItemProtocol]
+        if searchText.isEmpty {
+            searchFilteredItems = allCompletedItems
+        } else {
+            let lowercaseSearch = searchText.lowercased()
+            searchFilteredItems = allCompletedItems.filter { item in
+                item.name.lowercased().contains(lowercaseSearch) ||
+                item.itemDescription.lowercased().contains(lowercaseSearch)
             }
-            allCompletedItems.append(contentsOf: filteredMedications)
         }
         
         // Sort by action timestamp (most recent first)
-        return allCompletedItems.sorted { item1, item2 in
+        return searchFilteredItems.sorted { item1, item2 in
             let time1 = item1.actionTimestamp ?? item1.scheduledTime
             let time2 = item2.actionTimestamp ?? item2.scheduledTime
             return time1 > time2
@@ -287,11 +282,15 @@ struct ProgressView: View {
     private func generateHabitInstances() -> [HabitInstance] {
         var instances: [HabitInstance] = []
         
+        // Only generate instances for the selected date to avoid duplicates and improve performance
         for habit in habits {
-            for date in dateRange {
-                if shouldHabitOccurOn(habit: habit, date: date) {
-                    let instance = HabitInstance(from: habit, for: date)
-                    instance.updateState(from: stateManager.habitInstanceStates)
+            if shouldHabitOccurOn(habit: habit, date: selectedDate) {
+                let instance = HabitInstance(from: habit, for: selectedDate)
+                
+                // Only include if it's completed or skipped (checking the original habit)
+                if habit.isCompleted || habit.isSkipped {
+                    instance.isCompleted = habit.isCompleted
+                    instance.isSkipped = habit.isSkipped
                     instances.append(instance)
                 }
             }
@@ -303,16 +302,19 @@ struct ProgressView: View {
     private func generateMedicationInstances() -> [MedicationInstance] {
         var instances: [MedicationInstance] = []
         
+        // Only generate instances for the selected date to avoid duplicates and improve performance
         for medication in medications {
-            for date in dateRange {
+            // Only include medications that are completed or skipped
+            if medication.isCompleted || medication.isSkipped {
                 // Generate instances for each scheduled dose time
                 for doseNumber in 1...medication.timesPerDay {
                     let instance = MedicationInstance(
                         from: medication,
-                        for: date,
+                        for: selectedDate,
                         doseNumber: doseNumber
                     )
-                    instance.updateState(from: stateManager.medicationInstanceStates)
+                    instance.isCompleted = medication.isCompleted
+                    instance.isSkipped = medication.isSkipped
                     instances.append(instance)
                 }
             }
@@ -379,12 +381,6 @@ struct ProgressView: View {
     }
     
     // MARK: - Helper Methods
-    private func dayOfWeek(from date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EEE"
-        return formatter.string(from: date)
-    }
-    
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.dateStyle = .long

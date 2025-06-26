@@ -194,16 +194,37 @@ class HabitData {
 @Model
 @MainActor
 class MedicationData {
-    let id: UUID
+    @Attribute(.unique) var id: UUID
     var name: String
     var medicationDescription: String
     var instructions: String
     var frequency: MedicationFrequency
     var timesPerDay: Int
-    var reminderTimes: [Date]
+    @Attribute(.externalStorage) private var reminderTimesData: Data?
+    @Attribute(.externalStorage) private var unscheduledDosesData: Data?
     var isCompleted: Bool
     var isSkipped: Bool
-    var unscheduledDoses: [Date] // Track "Take Now" doses
+    
+    // Computed properties for arrays
+    var reminderTimes: [Date] {
+        get {
+            guard let data = reminderTimesData else { return [Date()] }
+            return (try? JSONDecoder().decode([Date].self, from: data)) ?? [Date()]
+        }
+        set {
+            reminderTimesData = try? JSONEncoder().encode(newValue)
+        }
+    }
+    
+    var unscheduledDoses: [Date] {
+        get {
+            guard let data = unscheduledDosesData else { return [] }
+            return (try? JSONDecoder().decode([Date].self, from: data)) ?? []
+        }
+        set {
+            unscheduledDosesData = try? JSONEncoder().encode(newValue)
+        }
+    }
     
     init(id: UUID = UUID(), 
          name: String = "", 
@@ -221,10 +242,10 @@ class MedicationData {
         self.instructions = instructions
         self.frequency = frequency
         self.timesPerDay = timesPerDay
-        self.reminderTimes = reminderTimes.isEmpty ? [Date()] : reminderTimes
+        self.reminderTimesData = try? JSONEncoder().encode(reminderTimes.isEmpty ? [Date()] : reminderTimes)
         self.isCompleted = isCompleted
         self.isSkipped = isSkipped
-        self.unscheduledDoses = unscheduledDoses
+        self.unscheduledDosesData = try? JSONEncoder().encode(unscheduledDoses)
     }
 }
 
@@ -259,6 +280,53 @@ enum MedicationFrequency: String, CaseIterable, Equatable, Codable {
     case threeTimesDaily = "Three Times Daily"
     case weekly = "Weekly"
     case asNeeded = "As Needed"
+}
+
+// MARK: - Instance Models for Tracking State
+@Model
+@MainActor
+class HabitInstanceData {
+    @Attribute(.unique) var id: UUID
+    var habitId: UUID
+    var instanceDate: Date
+    var isCompleted: Bool
+    var isSkipped: Bool
+    var completedAt: Date?
+    var skippedAt: Date?
+    
+    init(id: UUID = UUID(), habitId: UUID, instanceDate: Date, isCompleted: Bool = false, isSkipped: Bool = false, completedAt: Date? = nil, skippedAt: Date? = nil) {
+        self.id = id
+        self.habitId = habitId
+        self.instanceDate = instanceDate
+        self.isCompleted = isCompleted
+        self.isSkipped = isSkipped
+        self.completedAt = completedAt
+        self.skippedAt = skippedAt
+    }
+}
+
+@Model
+@MainActor
+class MedicationInstanceData {
+    @Attribute(.unique) var id: UUID
+    var medicationId: UUID
+    var instanceDate: Date
+    var doseNumber: Int
+    var isCompleted: Bool
+    var isSkipped: Bool
+    var completedAt: Date?
+    var skippedAt: Date?
+    
+    init(id: UUID = UUID(), medicationId: UUID, instanceDate: Date, doseNumber: Int, isCompleted: Bool = false, isSkipped: Bool = false, completedAt: Date? = nil, skippedAt: Date? = nil) {
+        self.id = id
+        self.medicationId = medicationId
+        self.instanceDate = instanceDate
+        self.doseNumber = doseNumber
+        self.isCompleted = isCompleted
+        self.isSkipped = isSkipped
+        self.completedAt = completedAt
+        self.skippedAt = skippedAt
+    }
 }
 
 // MARK: - SwiftData Conformances

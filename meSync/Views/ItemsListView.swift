@@ -55,7 +55,7 @@ class HabitInstance: ItemProtocol, ObservableObject {
         let namespace = UUID(
             uuidString: "12345678-1234-1234-1234-123456789012"
         )!
-        self.id = UUID(namespace: namespace, name: instanceKey)
+        self.id = UUID(namespace: namespace, name: self.instanceKey)
 
         self.name = habit.name
         self.itemDescription = habit.habitDescription
@@ -75,16 +75,6 @@ class HabitInstance: ItemProtocol, ObservableObject {
             ) ?? date
     }
 
-    func updateState(
-        from stateStorage: [String: (isCompleted: Bool, isSkipped: Bool, completedAt: Date?, skippedAt: Date?)]
-    ) {
-        if let state = stateStorage[instanceKey] {
-            self.isCompleted = state.isCompleted
-            self.isSkipped = state.isSkipped
-            self.completedAt = state.completedAt
-            self.skippedAt = state.skippedAt
-        }
-    }
 }
 
 // Extension to create UUID from namespace and name (similar to UUID v5)
@@ -164,14 +154,11 @@ class MedicationInstance: ItemProtocol, ObservableObject {
         // Create unique key for this instance
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
-        self.instanceKey =
-            "\(medication.id.uuidString)_\(formatter.string(from: date))_dose\(doseNumber)"
+        self.instanceKey = "\(medication.id.uuidString)_\(formatter.string(from: date))_dose\(doseNumber)"
 
         // Create a consistent UUID based on the instance key
-        let namespace = UUID(
-            uuidString: "12345678-1234-1234-1234-123456789012"
-        )!
-        self.id = UUID(namespace: namespace, name: instanceKey)
+        let namespace = UUID(uuidString: "12345678-1234-1234-1234-123456789012")!
+        self.id = UUID(namespace: namespace, name: self.instanceKey)
 
         self.name = medication.name
         self.itemDescription = isUnscheduled ? "Unscheduled dose" : medication.itemDescription
@@ -200,16 +187,6 @@ class MedicationInstance: ItemProtocol, ObservableObject {
         }
     }
 
-    func updateState(
-        from stateStorage: [String: (isCompleted: Bool, isSkipped: Bool, completedAt: Date?, skippedAt: Date?)]
-    ) {
-        if let state = stateStorage[instanceKey] {
-            self.isCompleted = state.isCompleted
-            self.isSkipped = state.isSkipped
-            self.completedAt = state.completedAt
-            self.skippedAt = state.skippedAt
-        }
-    }
 }
 
 struct ItemsListView: View {
@@ -217,9 +194,6 @@ struct ItemsListView: View {
     @Query(sort: \HabitData.remindAt) private var habits: [HabitData]
     @Query(sort: \MedicationData.name) private var medications: [MedicationData]
     @Binding var quickAddState: QuickAddState
-
-    // Use shared state manager
-    @StateObject private var stateManager = InstanceStateManager.shared
 
     // Force refresh trigger
     @State private var refreshTrigger = 0
@@ -236,15 +210,12 @@ struct ItemsListView: View {
     // MARK: - Dynamic Habit Generation
     private func generateHabitInstances() -> [HabitInstance] {
         var instances: [HabitInstance] = []
+        let calendar = Calendar.current
 
         for habit in habits {
             for date in dateRange {
                 if shouldHabitOccurOn(habit: habit, date: date) {
                     let instance = HabitInstance(from: habit, for: date)
-
-                    // Apply state from storage AFTER creating the instance
-                    instance.updateState(from: stateManager.habitInstanceStates)
-
                     instances.append(instance)
                 }
             }
@@ -267,10 +238,7 @@ struct ItemsListView: View {
                         for: date,
                         doseNumber: doseNumber
                     )
-
-                    // Apply state from storage AFTER creating the instance
-                    instance.updateState(from: stateManager.medicationInstanceStates)
-
+                    
                     instances.append(instance)
                 }
             }
@@ -403,7 +371,6 @@ struct ItemsListView: View {
                     ItemCard(
                         item: item,
                         quickAddState: $quickAddState,
-                        stateManager: stateManager,
                         refreshTrigger: $refreshTrigger
                     )
                 }
@@ -429,7 +396,6 @@ struct ItemsListView: View {
                     ItemCard(
                         item: item,
                         quickAddState: $quickAddState,
-                        stateManager: stateManager,
                         refreshTrigger: $refreshTrigger
                     )
                 }
@@ -462,10 +428,13 @@ struct ItemsListView: View {
 struct ItemCard: View {
     let item: any ItemProtocol
     @Binding var quickAddState: QuickAddState
-    @ObservedObject var stateManager: InstanceStateManager
     @Binding var refreshTrigger: Int
     @Environment(\.modelContext) private var modelContext
     @State private var isExpanded = false
+    
+    // Query for instance data
+    @Query private var habitInstances: [HabitInstanceData]
+    @Query private var medicationInstances: [MedicationInstanceData]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -800,26 +769,12 @@ struct ItemCard: View {
                     print("Error updating habit skip status: \(error)")
                 }
             } else if let habitInstance = item as? HabitInstance {
-                // Update in-memory state for habit instance
-                let currentState =
-                    stateManager.habitInstanceStates[habitInstance.instanceKey] ?? (
-                        isCompleted: false, isSkipped: false, completedAt: nil, skippedAt: nil
-                    )
-                let newSkippedState = !currentState.isSkipped
-
-                stateManager.habitInstanceStates[habitInstance.instanceKey] = (
-                    isCompleted: false,  // Ensure it's not completed when skipped
-                    isSkipped: newSkippedState,
-                    completedAt: nil,  // Clear completed timestamp
-                    skippedAt: newSkippedState ? Date() : nil  // Set or clear skipped timestamp
-                )
-
-                // Update the instance directly to trigger UI update
+                // Update in-memory state only
                 habitInstance.isCompleted = false
-                habitInstance.isSkipped = newSkippedState
+                habitInstance.isSkipped = !habitInstance.isSkipped
                 habitInstance.completedAt = nil
-                habitInstance.skippedAt = newSkippedState ? Date() : nil
-
+                habitInstance.skippedAt = habitInstance.isSkipped ? Date() : nil
+                
                 // Force refresh of the view
                 refreshTrigger += 1
             } else if let medicationItem = item as? MedicationData {
@@ -832,25 +787,12 @@ struct ItemCard: View {
                     print("Error updating medication skip status: \(error)")
                 }
             } else if let medicationInstance = item as? MedicationInstance {
-                // Update in-memory state for medication instance
-                let currentState =
-                    self.stateManager.medicationInstanceStates[medicationInstance.instanceKey]
-                    ?? (isCompleted: false, isSkipped: false, completedAt: nil, skippedAt: nil)
-                let newSkippedState = !currentState.isSkipped
-
-                self.stateManager.medicationInstanceStates[medicationInstance.instanceKey] = (
-                    isCompleted: false,  // Ensure it's not completed when skipped
-                    isSkipped: newSkippedState,
-                    completedAt: nil,  // Clear completed timestamp
-                    skippedAt: newSkippedState ? Date() : nil  // Set or clear skipped timestamp
-                )
-
-                // Update the instance directly to trigger UI update
+                // Update in-memory state only
                 medicationInstance.isCompleted = false
-                medicationInstance.isSkipped = newSkippedState
+                medicationInstance.isSkipped = !medicationInstance.isSkipped
                 medicationInstance.completedAt = nil
-                medicationInstance.skippedAt = newSkippedState ? Date() : nil
-
+                medicationInstance.skippedAt = medicationInstance.isSkipped ? Date() : nil
+                
                 // Force refresh of the view
                 refreshTrigger += 1
             }
@@ -878,26 +820,12 @@ struct ItemCard: View {
                     print("Error updating habit completion status: \(error)")
                 }
             } else if let habitInstance = item as? HabitInstance {
-                // Update in-memory state for habit instance
-                let currentState =
-                    stateManager.habitInstanceStates[habitInstance.instanceKey] ?? (
-                        isCompleted: false, isSkipped: false, completedAt: nil, skippedAt: nil
-                    )
-                let newCompletedState = !currentState.isCompleted
-
-                stateManager.habitInstanceStates[habitInstance.instanceKey] = (
-                    isCompleted: newCompletedState,
-                    isSkipped: false,  // Ensure it's not skipped when completed
-                    completedAt: newCompletedState ? Date() : nil,  // Set or clear completed timestamp
-                    skippedAt: nil  // Clear skipped timestamp
-                )
-
-                // Update the instance directly to trigger UI update
-                habitInstance.isCompleted = newCompletedState
+                // Update in-memory state only
+                habitInstance.isCompleted = !habitInstance.isCompleted
                 habitInstance.isSkipped = false
-                habitInstance.completedAt = newCompletedState ? Date() : nil
+                habitInstance.completedAt = habitInstance.isCompleted ? Date() : nil
                 habitInstance.skippedAt = nil
-
+                
                 // Force refresh of the view
                 refreshTrigger += 1
             } else if let medicationItem = item as? MedicationData {
@@ -912,25 +840,12 @@ struct ItemCard: View {
                     )
                 }
             } else if let medicationInstance = item as? MedicationInstance {
-                // Update in-memory state for medication instance
-                let currentState =
-                    self.stateManager.medicationInstanceStates[medicationInstance.instanceKey]
-                    ?? (isCompleted: false, isSkipped: false, completedAt: nil, skippedAt: nil)
-                let newCompletedState = !currentState.isCompleted
-
-                self.stateManager.medicationInstanceStates[medicationInstance.instanceKey] = (
-                    isCompleted: newCompletedState,
-                    isSkipped: false,  // Ensure it's not skipped when completed
-                    completedAt: newCompletedState ? Date() : nil,  // Set or clear completed timestamp
-                    skippedAt: nil  // Clear skipped timestamp
-                )
-
-                // Update the instance directly to trigger UI update
-                medicationInstance.isCompleted = newCompletedState
+                // Update in-memory state only
+                medicationInstance.isCompleted = !medicationInstance.isCompleted
                 medicationInstance.isSkipped = false
-                medicationInstance.completedAt = newCompletedState ? Date() : nil
+                medicationInstance.completedAt = medicationInstance.isCompleted ? Date() : nil
                 medicationInstance.skippedAt = nil
-
+                
                 // Force refresh of the view
                 refreshTrigger += 1
             }

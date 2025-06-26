@@ -79,7 +79,21 @@ struct HabitFormView: View {
             actionButtons
         }
         .onAppear {
-            setupForm()
+            // If creating new habit (not editing), always reset form
+            if case .habitForm(let editingHabit) = quickAddState,
+               editingHabit == nil {
+                // Reset to fresh state for new habit
+                habitData = HabitData()
+                selectedFrequency = .noRepetition
+                dailyInterval = 1
+                weeklyInterval = 1
+                selectedWeekdays = []
+                monthlyInterval = 1
+                selectedDayOfMonth = 1
+                customDays = []
+            } else {
+                setupForm()
+            }
             
             // Focus on name field when form appears
             isNameFocused = true

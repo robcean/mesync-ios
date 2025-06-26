@@ -17,6 +17,7 @@ struct MedicationFormView: View {
     @State private var selectedFrequency: MedicationFrequency
     @State private var timesPerDay: Int
     @State private var reminderTimes: [Date] = []
+    @State private var startDate: Date = Date()
     
     // UI State
     @FocusState private var isNameFocused: Bool
@@ -71,6 +72,7 @@ struct MedicationFormView: View {
                     }
                     
                     formFields
+                    startDateSection
                     timesPerDaySection
                     reminderTimesSection
                     
@@ -88,13 +90,24 @@ struct MedicationFormView: View {
             actionButtons
         }
         .onAppear {
-            // Always sync frequency on appear
-            selectedFrequency = medicationData.frequency
-            timesPerDay = medicationData.timesPerDay
-            
-            // Initialize reminder times if empty
-            if reminderTimes.isEmpty {
-                reminderTimes = Array(repeating: Date(), count: timesPerDay)
+            // If creating new medication (not editing), reset form
+            if case .medicationForm(let editingMedication) = quickAddState,
+               editingMedication == nil {
+                // Reset to fresh state for new medication
+                medicationData = MedicationData()
+                selectedFrequency = .daily
+                timesPerDay = 1
+                reminderTimes = [Date()]
+                startDate = Date()
+            } else {
+                // Always sync frequency on appear for editing
+                selectedFrequency = medicationData.frequency
+                timesPerDay = medicationData.timesPerDay
+                
+                // Initialize reminder times if empty
+                if reminderTimes.isEmpty {
+                    reminderTimes = Array(repeating: Date(), count: timesPerDay)
+                }
             }
             
             // Focus on name field when form appears
@@ -240,6 +253,22 @@ struct MedicationFormView: View {
                     .background(AppColors.cardBackground, in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius))
                 }
             }
+        }
+    }
+    
+    // MARK: - Start Date Section
+    private var startDateSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            Text("Start Date")
+                .subtitleStyle()
+            
+            DatePicker(
+                "Start Date",
+                selection: $startDate,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.compact)
+            .labelsHidden()
         }
     }
     
@@ -399,7 +428,16 @@ struct MedicationFormView: View {
         // Update medication data
         medicationData.frequency = selectedFrequency
         medicationData.timesPerDay = timesPerDay
-        medicationData.reminderTimes = reminderTimes
+        
+        // Apply start date to reminder times
+        let calendar = Calendar.current
+        medicationData.reminderTimes = reminderTimes.map { time in
+            let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+            return calendar.date(bySettingHour: timeComponents.hour ?? 0,
+                               minute: timeComponents.minute ?? 0,
+                               second: 0,
+                               of: startDate) ?? time
+        }
         
         // Save to SwiftData
         if isEditing {
@@ -407,13 +445,22 @@ struct MedicationFormView: View {
             // SwiftData will automatically track changes
         } else {
             // Create new medication
+            let calendar = Calendar.current
+            let adjustedReminderTimes = reminderTimes.map { time in
+                let timeComponents = calendar.dateComponents([.hour, .minute], from: time)
+                return calendar.date(bySettingHour: timeComponents.hour ?? 0,
+                                   minute: timeComponents.minute ?? 0,
+                                   second: 0,
+                                   of: startDate) ?? time
+            }
+            
             let newMedication = MedicationData(
                 name: medicationData.name.trimmingCharacters(in: .whitespacesAndNewlines),
                 medicationDescription: medicationData.medicationDescription,
                 instructions: medicationData.instructions,
                 frequency: selectedFrequency,
                 timesPerDay: timesPerDay,
-                reminderTimes: reminderTimes
+                reminderTimes: adjustedReminderTimes
             )
             modelContext.insert(newMedication)
         }
