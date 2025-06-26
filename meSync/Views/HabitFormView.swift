@@ -32,37 +32,31 @@ struct HabitFormView: View {
     
     // Focus management
     @FocusState private var isNameFocused: Bool
+    @FocusState private var isDescriptionFocused: Bool
     
-    // Editing state
-    private var editingHabit: HabitData? {
-        if case .habitForm(let habit) = quickAddState {
-            return habit
-        }
-        return nil
+    // Computed properties
+    private var isEditing: Bool {
+        quickAddState.isEditing
     }
     
-    private var isEditing: Bool {
-        editingHabit != nil
+    private var formTitle: String {
+        quickAddState.formTitle
+    }
+    
+    private var shouldShowDeleteButton: Bool {
+        isEditing || !habitData.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
     
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            headerView
+            formHeader
             
             // Form Content
             ScrollView {
-                VStack(spacing: AppSpacing.lg) {
-                    // Name Field
-                    nameField
-                    
-                    // Description Field
-                    descriptionField
-                    
-                    // Date and Time Picker
-                    dateTimeField
-                    
-                    // Frequency Section
+                VStack(spacing: AppSpacing.xl) {
+                    formFields
+                    dateTimeSection
                     frequencySection
                     
                     // Conditional fields based on frequency
@@ -75,22 +69,20 @@ struct HabitFormView: View {
                     } else if selectedFrequency == .custom {
                         customFields
                     }
+                    
+                    Spacer(minLength: AppSpacing.xxxl)
                 }
-                .standardHorizontalPadding()
-                .padding(.vertical, AppSpacing.lg)
+                .standardPadding()
             }
             
             // Action Buttons
             actionButtons
         }
-        .background(AppColors.background)
         .onAppear {
             setupForm()
             
             // Focus on name field when form appears
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isNameFocused = true
-            }
+            isNameFocused = true
         }
         .onChange(of: selectedFrequency) { oldValue, newValue in
             habitData.frequency = newValue
@@ -115,102 +107,74 @@ struct HabitFormView: View {
         }
     }
     
-    // MARK: - Header
-    private var headerView: some View {
+    // MARK: - Form Header
+    private var formHeader: some View {
         HStack {
-            Button("Cancel") {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    quickAddState.cancel()
-                }
-            }
-            .captionStyle()
-            .foregroundStyle(AppColors.secondaryText)
+            Text(formTitle)
+                .sectionTitleStyle()
             
             Spacer()
-            
-            Text(quickAddState.formTitle)
-                .subtitleStyle()
-                .foregroundStyle(AppColors.primaryText)
-            
-            Spacer()
-            
-            Button("Save") {
-                saveHabit()
-            }
-            .captionStyle()
-            .foregroundStyle(canSave ? AppColors.primary : AppColors.tertiaryText)
-            .disabled(!canSave)
         }
-        .standardHorizontalPadding()
-        .padding(.vertical, AppSpacing.md)
-        .background(AppColors.cardBackground)
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundStyle(AppColors.secondaryText.opacity(0.2)),
-            alignment: .bottom
-        )
+        .headerContainerStyle()
     }
     
     // MARK: - Form Fields
-    private var nameField: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text("Name")
-                .captionStyle()
-                .foregroundStyle(AppColors.secondaryText)
+    private var formFields: some View {
+        VStack(spacing: AppSpacing.lg) {
+            // Name Field
+            VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                Text("Name")
+                    .subtitleStyle()
+                
+                TextField("Enter habit name", text: $habitData.name)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($isNameFocused)
+            }
             
-            TextField("Enter habit name", text: $habitData.name)
-                .textFieldStyle(.roundedBorder)
-                .focused($isNameFocused)
-        }
-    }
-    
-    private var descriptionField: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.sm) {
-            Text("Description")
-                .captionStyle()
-                .foregroundStyle(AppColors.secondaryText)
-            
-            TextEditor(text: $habitData.habitDescription)
-                .frame(minHeight: 80)
-                .padding(AppSpacing.sm)
-                .background(AppColors.cardBackground, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(AppColors.secondaryText.opacity(0.3), lineWidth: 1)
+            // Description Field
+            VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                Text("Description")
+                    .subtitleStyle()
+                
+                DynamicHeightTextEditor(
+                    text: $habitData.habitDescription,
+                    placeholder: "Enter habit description"
                 )
+                .focused($isDescriptionFocused)
+            }
         }
     }
     
-    private var dateTimeField: some View {
+    // MARK: - Date Time Section
+    private var dateTimeSection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             Text("Date and Time")
-                .captionStyle()
-                .foregroundStyle(AppColors.secondaryText)
+                .subtitleStyle()
             
-            DatePicker("Select date and time", selection: $habitData.remindAt, displayedComponents: [.date, .hourAndMinute])
-                .datePickerStyle(.compact)
+            DatePicker(
+                "Select date and time",
+                selection: $habitData.remindAt,
+                displayedComponents: [.date, .hourAndMinute]
+            )
+            .datePickerStyle(.compact)
         }
     }
     
     private var frequencySection: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             Text("Repeat")
-                .captionStyle()
-                .foregroundStyle(AppColors.secondaryText)
+                .subtitleStyle()
             
-            VStack(spacing: AppSpacing.xs) {
-                frequencyButton(for: .noRepetition)
-                frequencyButton(for: .daily)
-                frequencyButton(for: .weekly)
-                frequencyButton(for: .monthly)
-                frequencyButton(for: .custom)
+            VStack(spacing: AppSpacing.md) {
+                ForEach([HabitFrequency.noRepetition, .daily, .weekly, .monthly, .custom], id: \.self) { frequency in
+                    frequencyButton(for: frequency)
+                }
             }
         }
     }
     
     private func frequencyButton(for frequency: HabitFrequency) -> some View {
-        Button(action: {
+        Button {
             withAnimation(.easeInOut(duration: 0.2)) {
                 selectedFrequency = frequency
                 
@@ -222,7 +186,7 @@ struct HabitFormView: View {
                     selectedWeekdays.insert(adjustedWeekday)
                 }
             }
-        }) {
+        } label: {
             HStack {
                 Image(systemName: selectedFrequency == frequency ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(selectedFrequency == frequency ? AppColors.primary : AppColors.tertiaryText)
@@ -236,12 +200,12 @@ struct HabitFormView: View {
             .padding(AppSpacing.md)
             .background(
                 selectedFrequency == frequency ? AppColors.primary.opacity(0.1) : AppColors.cardBackground,
-                in: RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius)
+                RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
                     .stroke(
-                        selectedFrequency == frequency ? AppColors.primary.opacity(0.3) : AppColors.secondaryText.opacity(0.2),
+                        selectedFrequency == frequency ? AppColors.primary : AppColors.secondaryText.opacity(0.2),
                         lineWidth: 1
                     )
             )
@@ -252,8 +216,7 @@ struct HabitFormView: View {
     private var dailyIntervalField: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             Text("Every")
-                .captionStyle()
-                .foregroundStyle(AppColors.secondaryText)
+                .subtitleStyle()
             
             HStack {
                 TextField("1", value: $dailyInterval, format: .number)
@@ -276,8 +239,7 @@ struct HabitFormView: View {
             // Weekly interval
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 Text("Every")
-                    .captionStyle()
-                    .foregroundStyle(AppColors.secondaryText)
+                    .subtitleStyle()
                 
                 HStack {
                     TextField("1", value: $weeklyInterval, format: .number)
@@ -296,8 +258,7 @@ struct HabitFormView: View {
             // Weekday selector
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 Text("On days")
-                    .captionStyle()
-                    .foregroundStyle(AppColors.secondaryText)
+                    .subtitleStyle()
                 
                 weekdaySelector
             }
@@ -325,10 +286,10 @@ struct HabitFormView: View {
                         .frame(width: 40, height: 32)
                         .background(
                             selectedWeekdays.contains(day) ? AppColors.primary : AppColors.cardBackground,
-                            in: RoundedRectangle(cornerRadius: 8)
+                            in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
                                 .stroke(
                                     selectedWeekdays.contains(day) ? AppColors.primary : AppColors.secondaryText.opacity(0.3),
                                     lineWidth: 1
@@ -346,8 +307,7 @@ struct HabitFormView: View {
             // Monthly interval
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 Text("Every")
-                    .captionStyle()
-                    .foregroundStyle(AppColors.secondaryText)
+                    .subtitleStyle()
                 
                 HStack {
                     TextField("1", value: $monthlyInterval, format: .number)
@@ -366,8 +326,7 @@ struct HabitFormView: View {
             // Day of month selector
             VStack(alignment: .leading, spacing: AppSpacing.sm) {
                 Text("On day")
-                    .captionStyle()
-                    .foregroundStyle(AppColors.secondaryText)
+                    .subtitleStyle()
                 
                 HStack {
                     TextField("1", value: $selectedDayOfMonth, format: .number)
@@ -389,8 +348,7 @@ struct HabitFormView: View {
     private var customFields: some View {
         VStack(alignment: .leading, spacing: AppSpacing.sm) {
             Text("Select days of the month")
-                .captionStyle()
-                .foregroundStyle(AppColors.secondaryText)
+                .subtitleStyle()
             
             customDaySelector
         }
@@ -412,10 +370,10 @@ struct HabitFormView: View {
                         .frame(width: 32, height: 32)
                         .background(
                             customDays.contains(day) ? AppColors.primary : AppColors.cardBackground,
-                            in: RoundedRectangle(cornerRadius: 8)
+                            in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
                                 .stroke(
                                     customDays.contains(day) ? AppColors.primary : AppColors.secondaryText.opacity(0.3),
                                     lineWidth: 1
@@ -429,33 +387,45 @@ struct HabitFormView: View {
     
     // MARK: - Action Buttons
     private var actionButtons: some View {
-        VStack(spacing: AppSpacing.sm) {
-            // Delete button (only when editing)
-            if isEditing {
-                Button("Delete Habit") {
+        VStack(spacing: AppSpacing.md) {
+            HStack(spacing: AppSpacing.md) {
+                // Cancel Button
+                Button("Cancel") {
+                    cancelAction()
+                }
+                .secondaryActionButtonStyle()
+                .pressableStyle()
+                
+                // Save Button
+                Button("Save") {
+                    saveHabit()
+                }
+                .primaryActionButtonStyle()
+                .pressableStyle()
+            }
+            
+            // Delete Button (conditional)
+            if shouldShowDeleteButton {
+                Button("Delete") {
                     deleteHabit()
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, AppSpacing.md)
-                .background(Color.red.opacity(0.1), in: RoundedRectangle(cornerRadius: AppSpacing.cardCornerRadius))
-                .foregroundStyle(.red)
+                .destructiveButtonStyle()
                 .pressableStyle()
             }
         }
-        .standardHorizontalPadding()
-        .padding(.vertical, AppSpacing.lg)
-        .background(AppColors.cardBackground)
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundStyle(AppColors.secondaryText.opacity(0.2)),
-            alignment: .top
-        )
+        .standardPadding()
+        .background(AppColors.headerMaterial)
     }
     
-    // MARK: - Computed Properties
-    private var canSave: Bool {
-        !habitData.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    // MARK: - Actions
+    private func cancelAction() {
+        // Dismiss keyboard
+        isNameFocused = false
+        isDescriptionFocused = false
+        
+        withAnimation(.easeInOut(duration: 0.3)) {
+            quickAddState.cancel()
+        }
     }
     
     // MARK: - Methods
@@ -483,8 +453,24 @@ struct HabitFormView: View {
         }
     }
     
+    // MARK: - Editing state helper
+    private var editingHabit: HabitData? {
+        if case .habitForm(let habit) = quickAddState {
+            return habit
+        }
+        return nil
+    }
+    
     private func saveHabit() {
-        guard canSave else { return }
+        // Validate required fields
+        guard !habitData.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            // TODO: Show validation error
+            return
+        }
+        
+        // Dismiss keyboard
+        isNameFocused = false
+        isDescriptionFocused = false
         
         // Update habit data with current values
         habitData.frequency = selectedFrequency
@@ -522,18 +508,22 @@ struct HabitFormView: View {
     }
     
     private func deleteHabit() {
-        guard let editingHabit = editingHabit else { return }
+        guard isEditing else { return }
         
-        modelContext.delete(editingHabit)
-        
-        do {
-            try modelContext.save()
-            print("Habit deleted successfully")
-        } catch {
-            print("Error deleting habit: \(error)")
+        if let editingHabit = editingHabit {
+            // Delete from SwiftData
+            modelContext.delete(editingHabit)
+            
+            // Save context
+            do {
+                try modelContext.save()
+                print("Habit deleted successfully")
+            } catch {
+                print("Error deleting habit: \(error)")
+                // TODO: Show error alert
+            }
         }
         
-        // Close form
         withAnimation(.easeInOut(duration: 0.3)) {
             quickAddState.hide()
         }

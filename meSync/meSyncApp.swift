@@ -15,6 +15,7 @@ struct meSyncApp: App {
             Item.self,
             TaskData.self,
             HabitData.self,
+            MedicationData.self,
         ])
         let modelConfiguration = ModelConfiguration(
             schema: schema, 

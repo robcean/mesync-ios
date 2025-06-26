@@ -73,9 +73,7 @@ struct TaskFormView: View {
             selectedPriority = taskData.priority
             
             // Focus on name field when form appears
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                isNameFocused = true
-            }
+            isNameFocused = true
         }
         .onChange(of: selectedPriority) { oldValue, newValue in
             taskData.priority = newValue
@@ -111,11 +109,11 @@ struct TaskFormView: View {
                 Text("Description")
                     .subtitleStyle()
                 
-                TextEditor(text: $taskData.taskDescription)
-                    .frame(minHeight: 80)
-                    .padding(AppSpacing.sm)
-                    .background(AppColors.cardBackground, in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius))
-                    .focused($isDescriptionFocused)
+                DynamicHeightTextEditor(
+                    text: $taskData.taskDescription,
+                    placeholder: "Enter task description"
+                )
+                .focused($isDescriptionFocused)
             }
         }
     }

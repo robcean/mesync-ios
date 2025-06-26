@@ -106,6 +106,7 @@ enum QuickAddState: Equatable {
 
 // MARK: - Data Models
 @Model
+@MainActor
 class TaskData {
     @Attribute(.unique) var id: UUID
     var name: String
@@ -127,6 +128,7 @@ class TaskData {
 }
 
 @Model
+@MainActor
 class HabitData {
     @Attribute(.unique) var id: UUID
     var name: String
@@ -189,19 +191,40 @@ class HabitData {
     }
 }
 
-struct MedicationData: Equatable {
+@Model
+@MainActor
+class MedicationData {
     let id: UUID
     var name: String
-    var dosage: String
+    var medicationDescription: String
+    var instructions: String
     var frequency: MedicationFrequency
+    var timesPerDay: Int
     var reminderTimes: [Date]
+    var isCompleted: Bool
+    var isSkipped: Bool
+    var unscheduledDoses: [Date] // Track "Take Now" doses
     
-    init(id: UUID = UUID(), name: String = "", dosage: String = "", frequency: MedicationFrequency = .daily, reminderTimes: [Date] = []) {
+    init(id: UUID = UUID(), 
+         name: String = "", 
+         medicationDescription: String = "",
+         instructions: String = "",
+         frequency: MedicationFrequency = .daily, 
+         timesPerDay: Int = 1,
+         reminderTimes: [Date] = [],
+         isCompleted: Bool = false,
+         isSkipped: Bool = false,
+         unscheduledDoses: [Date] = []) {
         self.id = id
         self.name = name
-        self.dosage = dosage
+        self.medicationDescription = medicationDescription
+        self.instructions = instructions
         self.frequency = frequency
-        self.reminderTimes = reminderTimes
+        self.timesPerDay = timesPerDay
+        self.reminderTimes = reminderTimes.isEmpty ? [Date()] : reminderTimes
+        self.isCompleted = isCompleted
+        self.isSkipped = isSkipped
+        self.unscheduledDoses = unscheduledDoses
     }
 }
 

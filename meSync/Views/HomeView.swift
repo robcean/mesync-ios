@@ -11,6 +11,13 @@ struct HomeView: View {
     @Binding var quickAddState: QuickAddState
     @State private var taskFormCounter = 0
     @State private var habitFormCounter = 0
+    @State private var medicationFormCounter = 0
+    @State private var selectedTab: Tab = .home
+    
+    enum Tab {
+        case home
+        case medication
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -18,15 +25,22 @@ struct HomeView: View {
             headerView
             
             // Contenido central scrollable
-            ScrollView {
-                VStack(spacing: 0) {
-                    // Quick Add Content (cuando esté activo)
-                    quickAddContent
-                    
-                    // Lista de ítems del día
-                    ItemsListView(quickAddState: $quickAddState)
-                        .padding(.top, quickAddState == .hidden ? AppSpacing.sm : AppSpacing.lg)
+            if selectedTab == .home {
+                ScrollView {
+                    VStack(spacing: 0) {
+                        // Quick Add Content (cuando esté activo)
+                        quickAddContent
+                        
+                        // Lista de ítems del día
+                        ItemsListView(quickAddState: $quickAddState)
+                            .padding(.top, quickAddState == .hidden ? AppSpacing.sm : AppSpacing.lg)
+                    }
                 }
+            } else if selectedTab == .medication {
+                MedicationsView(
+                    quickAddState: $quickAddState,
+                    medicationFormCounter: medicationFormCounter
+                )
             }
             
             // Tab bar fijo
@@ -50,9 +64,13 @@ struct HomeView: View {
                 
                 Spacer()
                 
-                Button("Quick Add") {
+                Button(selectedTab == .medication ? "Add Meds" : "Quick Add") {
                     withAnimation(.easeInOut(duration: 0.3)) {
-                        toggleQuickAdd()
+                        if selectedTab == .medication {
+                            showMedicationForm()
+                        } else {
+                            toggleQuickAdd()
+                        }
                     }
                 }
                 .primaryButtonStyle()
@@ -93,7 +111,11 @@ struct HomeView: View {
                 ))
             
         case .medicationForm:
-            placeholderFormView(title: "Creating Medication")
+            MedicationFormView(quickAddState: $quickAddState)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
         }
     }
     
@@ -154,7 +176,12 @@ struct HomeView: View {
         HStack {
             Spacer()
             
-            TabBarButton(title: "Home", systemImage: AppIcons.home)
+            TabBarButton(
+                title: "Home", 
+                systemImage: AppIcons.home,
+                isSelected: selectedTab == .home,
+                action: { selectedTab = .home }
+            )
             
             Spacer()
             
@@ -166,7 +193,15 @@ struct HomeView: View {
             
             Spacer()
             
-            TabBarButton(title: "Medication", systemImage: AppIcons.medication)
+            TabBarButton(
+                title: "Medication", 
+                systemImage: AppIcons.medication,
+                isSelected: selectedTab == .medication,
+                action: { 
+                    selectedTab = .medication
+                    quickAddState = .hidden
+                }
+            )
             
             Spacer()
             
@@ -206,6 +241,9 @@ struct HomeView: View {
     }
     
     private func showMedicationForm() {
+        // Increment counter to force view recreation for new medications
+        medicationFormCounter += 1
+        
         withAnimation(.easeInOut(duration: 0.3)) {
             quickAddState = .medicationForm(editingMedication: nil)
         }
