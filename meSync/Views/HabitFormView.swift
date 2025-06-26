@@ -165,12 +165,56 @@ struct HabitFormView: View {
             Text("Repeat")
                 .subtitleStyle()
             
-            VStack(spacing: AppSpacing.md) {
-                ForEach([HabitFrequency.noRepetition, .daily, .weekly, .monthly, .custom], id: \.self) { frequency in
-                    frequencyButton(for: frequency)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.sm) {
+                    ForEach([HabitFrequency.noRepetition, .daily, .weekly, .monthly, .custom], id: \.self) { frequency in
+                        frequencyChip(for: frequency)
+                    }
                 }
+                .padding(.horizontal, 1) // Small padding to ensure content isn't cut off
             }
         }
+    }
+    
+    private func frequencyChip(for frequency: HabitFrequency) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                selectedFrequency = frequency
+                
+                // Auto-select current day when choosing weekly
+                if frequency == .weekly && selectedWeekdays.isEmpty {
+                    let calendar = Calendar.current
+                    let weekday = calendar.component(.weekday, from: Date())
+                    let adjustedWeekday = weekday == 1 ? 7 : weekday - 1 // Convert to Monday=1 format
+                    selectedWeekdays.insert(adjustedWeekday)
+                }
+            }
+        } label: {
+            HStack(spacing: AppSpacing.xs) {
+                Image(systemName: selectedFrequency == frequency ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 14))
+                    .foregroundStyle(selectedFrequency == frequency ? .white : AppColors.tertiaryText)
+                
+                Text(frequency.rawValue)
+                    .font(AppTypography.caption)
+                    .fontWeight(.medium)
+                    .foregroundStyle(selectedFrequency == frequency ? .white : AppColors.primaryText)
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(
+                selectedFrequency == frequency ? AppColors.primary : AppColors.cardBackground,
+                in: RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: AppSpacing.cornerRadius)
+                    .stroke(
+                        selectedFrequency == frequency ? AppColors.primary : AppColors.secondaryText.opacity(0.3),
+                        lineWidth: 1
+                    )
+            )
+        }
+        .pressableStyle()
     }
     
     private func frequencyButton(for frequency: HabitFrequency) -> some View {

@@ -16,7 +16,10 @@ struct HomeView: View {
     
     enum Tab {
         case home
+        case habit
+        case task
         case medication
+        case progress
     }
     
     var body: some View {
@@ -36,11 +39,23 @@ struct HomeView: View {
                             .padding(.top, quickAddState == .hidden ? AppSpacing.sm : AppSpacing.lg)
                     }
                 }
+            } else if selectedTab == .habit {
+                HabitsView(
+                    quickAddState: $quickAddState,
+                    habitFormCounter: habitFormCounter
+                )
+            } else if selectedTab == .task {
+                TasksView(
+                    quickAddState: $quickAddState,
+                    taskFormCounter: taskFormCounter
+                )
             } else if selectedTab == .medication {
                 MedicationsView(
                     quickAddState: $quickAddState,
                     medicationFormCounter: medicationFormCounter
                 )
+            } else if selectedTab == .progress {
+                ProgressView()
             }
             
             // Tab bar fijo
@@ -64,17 +79,27 @@ struct HomeView: View {
                 
                 Spacer()
                 
-                Button(selectedTab == .medication ? "Add Meds" : "Quick Add") {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        if selectedTab == .medication {
-                            showMedicationForm()
-                        } else {
-                            toggleQuickAdd()
+                if selectedTab != .progress {
+                    Button(buttonTitle) {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            switch selectedTab {
+                            case .home:
+                                toggleQuickAdd()
+                            case .habit:
+                                showHabitForm()
+                            case .task:
+                                showTaskForm()
+                            case .medication:
+                                showMedicationForm()
+                            case .progress:
+                                // Progress doesn't have a form
+                                break
+                            }
                         }
                     }
+                    .primaryButtonStyle()
+                    .pressableStyle()
                 }
-                .primaryButtonStyle()
-                .pressableStyle()
             }
         }
         .headerContainerStyle()
@@ -185,11 +210,27 @@ struct HomeView: View {
             
             Spacer()
             
-            TabBarButton(title: "Habit", systemImage: AppIcons.habit)
+            TabBarButton(
+                title: "Habit", 
+                systemImage: AppIcons.habit,
+                isSelected: selectedTab == .habit,
+                action: { 
+                    quickAddState = .hidden
+                    selectedTab = .habit
+                }
+            )
             
             Spacer()
             
-            TabBarButton(title: "Task", systemImage: AppIcons.task)
+            TabBarButton(
+                title: "Task", 
+                systemImage: AppIcons.task,
+                isSelected: selectedTab == .task,
+                action: { 
+                    quickAddState = .hidden
+                    selectedTab = .task
+                }
+            )
             
             Spacer()
             
@@ -205,7 +246,15 @@ struct HomeView: View {
             
             Spacer()
             
-            TabBarButton(title: "Progress", systemImage: AppIcons.progress)
+            TabBarButton(
+                title: "Progress", 
+                systemImage: AppIcons.progress,
+                isSelected: selectedTab == .progress,
+                action: { 
+                    quickAddState = .hidden
+                    selectedTab = .progress
+                }
+            )
             
             Spacer()
         }
@@ -250,6 +299,21 @@ struct HomeView: View {
     }
     
     // MARK: - Computed Properties
+    private var buttonTitle: String {
+        switch selectedTab {
+        case .home:
+            return "Quick Add"
+        case .habit:
+            return "Add Habit"
+        case .task:
+            return "Add Task"
+        case .medication:
+            return "Add Meds"
+        case .progress:
+            return "" // No add button for progress
+        }
+    }
+    
     private var currentDateString: String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE, MMMM d, yyyy"
